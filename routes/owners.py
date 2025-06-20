@@ -1,19 +1,6 @@
-from database.database import get_db_connection
+from database.database import get_db_connection, get_cursor
 from flask import jsonify, request
-
-def get_owner_by_id(owner_id):
-    con = get_db_connection()
-    cur = con.cursor()
-    owner = cur.execute('SELECT * FROM Owners WHERE id = ?', (owner_id,)).fetchone()
-    con.close()
-    return owner
-
-def get_animal_by_id(animal_id):
-    con = get_db_connection()
-    cur = con.cursor()
-    animal = cur.execute('SELECT * FROM Animals WHERE id = ?', (animal_id,)).fetchone()
-    con.close()
-    return animal
+from lib.helper_functions import get_owner_by_id, get_animal_by_id
 
 
 def register_owner_routes(app):
@@ -28,23 +15,24 @@ def register_owner_routes(app):
                 description: JSON-Liste aller Besitzer
                 examples:
                     application/json:
-                        - id: 1
-                          name: Max Mustermann
-                          email: max_mustermann@email.de
-                          phone: 01234 56789
-                        - id: 2
-                          name: Anna Schmidt
-                          email: anna_schmidt@email.de
-                          phone: 0987 65432
+                    -
+                        id: 1
+                        name: Max Mustermann
+                        email: max_mustermann@email.de
+                        phone: 01234 56789
+                    -
+                        id: 2
+                        name: Anna Schmidt
+                        email: anna_schmidt@email.de
+                        phone: 0987 65432
         """
         # Daten abrufen von der DB
         con = get_db_connection() # Verbindung mit der DB
-        cur = con.cursor()
-        owners = cur.execute('SELECT * FROM Owners').fetchall()
+        cur = get_cursor(con)
+        cur.execute('SELECT * FROM Owners')
+        owners = cur.fetchall()
         con.close()
-        return jsonify([dict(owner) for owner in owners]), 200
-
-
+        return jsonify(owners), 200
 
 
     ## GET-Route implementieren, um Daten von einem Owner anzuzeigen
@@ -64,25 +52,20 @@ def register_owner_routes(app):
                 description: JSON-Objekt von einem Besitzer
                 examples:
                     application/json:
-                        - id: 1
-                          name: Max Mustermann
-                          email: max_mustermann@email.de 
-                          phone: 01234 56789
+                        id: 1
+                        name: Max Mustermann
+                        email: max_mustermann@email.de 
+                        phone: 01234 56789
             404:
                 description: Besitzer wurde nicht gefunden
                 examples:
                     application/json:
-                        - message: Besitzer mit der ID 5 existiert nicht
+                        message: Besitzer mit der ID 5 existiert nicht
         """
-        con = get_db_connection()
-        cur = con.cursor()
-        owner = cur.execute('SELECT * FROM Owners WHERE id = ?', (owner_id,)).fetchone()
+        owner = get_owner_by_id(owner_id)
         if owner is None:
             return jsonify({"message": f"Besitzer mit der ID {owner_id} existiert nicht"}), 404
-        con.commit()
-        con.close()
-        return jsonify(dict(owner)), 200
-
+        return jsonify(owner), 200
 
 
     @app.route("/api/owners", methods=['POST'])
@@ -90,14 +73,17 @@ def register_owner_routes(app):
         """
         Neuen Besitzer hinzufügen
         ---
-        consumes:
-            - application/json
+                 
+        consumes: [application/json]
         parameters:
-            - in: body
-              name: Besitzer
-              required: true
-              schema:
+        -
+            in: body
+            name: Besitzer
+            required: true
+            description: name muss angegeben werden
+            schema:
                 type: object
+                required: [name]
                 properties:
                     name:
                         type: string
@@ -113,20 +99,20 @@ def register_owner_routes(app):
                 description: Besitzer wurde erfolgreich hinzugefügt
                 examples:
                     application/json:
-                        - message: Besitzer wurde erfolgreich hinzugefügt
+                        message: Besitzer wurde erfolgreich hinzugefügt
             400:
                 description: Keine oder fehlerhafte Daten übertragen
                 examples:
                     application/json:
-                        - message: Keine oder fehlerhafte Daten übertragen
+                        message: Keine oder fehlerhafte Daten übertragen
         """
         new_owner = request.get_json()
         if not new_owner or 'name' not in new_owner:
             return jsonify({"message": "Keine oder fehlerhafte Daten übertragen"}), 400
         con = get_db_connection() # Schritt 1: DB-Verbindung
-        cur = con.cursor() # Schritt 2: Cursor-Objekt definieren
+        cur = get_cursor(con) # Schritt 2: Cursor-Objekt definieren
         # Schritt 3: Befehl ausführen
-        cur.execute('INSERT INTO Owners (name, email, phone) VALUES (?,?,?)', 
+        cur.execute('INSERT INTO Owners (name, email, phone) VALUES (%s,%s,%s)', 
                     (new_owner['name'],
                     new_owner['email'],
                     new_owner['phone'])
@@ -143,30 +129,31 @@ def register_owner_routes(app):
         Einen Besitzer löschen
         ---
         parameters:
-            - name: owner_id
-              in: path
-              type: integer
-              required: true
-              description: Die ID des zu löschenden Besitzers
+        -
+            name: owner_id
+            in: path
+            type: integer
+            required: true
+            description: Die ID des zu löschenden Besitzers
         responses:
             200:
                 description: Besitzer wurde gelöscht
                 examples:
                     application/json:
-                        - message: Besitzer wurde erfolgreich gelöscht
+                        message: Besitzer wurde erfolgreich gelöscht
             404:
                 description: Besitzer wurde nicht gefunden
                 examples:
                     application/json:
-                        - message: Besitzer mit der ID 5 existiert nicht
+                        message: Besitzer mit der ID 5 existiert nicht
         """
         con = get_db_connection() 
-        cur = con.cursor()
+        cur = get_cursor(con)
         # Überprüfe, ob das Tier mit der angegebenen ID überhaupt existiert
-        owner = cur.execute('SELECT * FROM Owners WHERE id = ?', (owner_id,)).fetchone() # 4 OR 1=! --
+        owner = cur.execute('SELECT * FROM Owners WHERE id = %s', (owner_id,)).fetchone() # 4 OR 1=! --
         if owner is None:
             return jsonify({"message": "Besitzer mit dieser ID existiert nicht"}), 404
-        cur.execute('DELETE FROM Owners WHERE id = ?', (owner_id,) )
+        cur.execute('DELETE FROM Owners WHERE id = %s', (owner_id,) )
         con.commit()
         con.close()
         return jsonify({"message": "Besitzer wurde erfolgreich gelöscht"}), 200
@@ -180,16 +167,20 @@ def register_owner_routes(app):
         Besitzer aktualisieren im Ganzen
         ---
         parameters:
-            - name: owner_id
-              in: path
-              type: integer
-              required: true
-              description: Die ID des Besitzers, der ersetzt werden soll
-            - in: body
-              name: tier
-              required: true
-              schema: 
+        -
+            name: owner_id
+            in: path
+            type: integer
+            required: true
+            description: Die ID des Besitzers, der ersetzt werden soll
+        -
+            in: body
+            name: tier
+            required: true
+            description: name muss angegeben werden
+            schema: 
                 type: object
+                required: [name]
                 properties:
                     name:
                         type: string
@@ -205,24 +196,24 @@ def register_owner_routes(app):
                 description: Besitzer wurde aktualisiert
                 examples:
                     application/json:
-                        - message: Besitzer wurde komplett aktualisiert
+                        message: Besitzer wurde komplett aktualisiert
             404:
                 description: Besitzer wurde nicht gefunden
                 examples:
                     application/json:
-                        - message: Besitzer mit der ID 7 existiert nicht
+                        message: Besitzer mit der ID 7 existiert nicht
         """
         updated_owner = request.get_json() # Speichere dir das Objekt im Body aus dem Request des Clients
         if not updated_owner or 'name' not in updated_owner:
             return jsonify({"message": "Fehlende Daten"}), 400
         con = get_db_connection() # Schritt 1
-        cur = con.cursor() # Schritt 2
+        cur = get_cursor(con) # Schritt 2
         # Schritt 3
-        owner = cur.execute('SELECT * FROM Owners WHERE id = ?', (owner_id,)).fetchone()
+        owner = cur.execute('SELECT * FROM Owners WHERE id = %s', (owner_id,)).fetchone()
         if owner is None:
             return jsonify({"message": f"Besitzer mit der ID {owner_id} existiert nicht"}), 404
         # Update jetzt den Besitzer mit der übergebenen ID und mit den übergebenen Daten
-        cur.execute('UPDATE Owners SET name = ?, email = ?, phone = ? WHERE id = ?', (updated_owner['name'], updated_owner['email'], updated_owner['phone'], owner_id))
+        cur.execute('UPDATE Owners SET name = %s, email = %s, phone = %s WHERE id = %s', (updated_owner['name'], updated_owner['email'], updated_owner['phone'], owner_id))
         con.commit()
         con.close()
         return jsonify({"message": "Besitzer wurde komplett aktualisiert"}), 200
@@ -238,16 +229,20 @@ def register_owner_routes(app):
         Besitzer teilweise ändern (z.B. nur die Email)
         ---
         parameters:
-            - name: owner_id
-              in: path
-              type: integer
-              required: true
-              description: Die ID des Besitzers, der aktualisiert werden soll
-            - in: body
-              name: besitzer
-              required: anyOf
-              schema: 
+        -
+            name: owner_id
+            in: path
+            type: integer
+            required: true
+            description: Die ID des Besitzers, der aktualisiert werden soll
+        -
+            in: body
+            name: besitzer
+            required: true
+            description: Es muss mindestens einer der Werte angegeben werden
+            schema: 
                 type: object
+                required: anyOf
                 properties:
                     id:
                         type: integer
@@ -266,19 +261,19 @@ def register_owner_routes(app):
                 description: Besitzer wurde geupdated
                 examples:
                     application/json:
-                        - message: Besitzer wurde geupdated
+                        message: Besitzer wurde geupdated
             404:
                 description: Besitzer wurde nicht gefunden
                 examples:
                     application/json:
-                        - message: Besitzer mit der ID 7 existiert nicht
+                        message: Besitzer mit der ID 7 existiert nicht
         """
         updated_owner = request.get_json()
         if not updated_owner:
             return jsonify({"message": "Fehlende Daten"}), 400
         con = get_db_connection()
-        cur = con.cursor()
-        owner = cur.execute('SELECT * FROM Owners WHERE id = ?', (owner_id,)).fetchone()
+        cur = get_cursor(con)
+        owner = cur.execute('SELECT * FROM Owners WHERE id = %s', (owner_id,)).fetchone()
         if owner is None:
             return jsonify({"message": f"Besitzer mit der ID {owner_id} existiert nicht"}), 404
         # Leere Liste, wo wir die Felder mitgeben, die wir speziell updaten wollen
@@ -288,12 +283,12 @@ def register_owner_routes(app):
 
         for field in ['name', 'email', 'phone']: # Iteriere über alle möglichen, vorhandenen Spalte der Tabelle
             if field in updated_owner:
-                update_fields.append(f'{field} = ?') # name = ?, age = ?
+                update_fields.append(f'{field} = %s') # name = %s, age = %s
                 update_values.append(updated_owner[field]) # elephant Joel, 24
         
         if update_fields:
             update_values.append(owner_id)
-            query = f'UPDATE Owners SET {", ".join(update_fields)} WHERE id = ?'
+            query = f'UPDATE Owners SET {", ".join(update_fields)} WHERE id = %s'
             cur.execute(query, update_values)
             con.commit()
         con.close()
@@ -314,8 +309,8 @@ def register_owner_routes(app):
             return jsonify({"message": f"Tier gehört bereits {current_owner}"}), 400
         # Falls das alles nicht zutrifft, kann die Adoption stattfinden
         con = get_db_connection()
-        cur = con.cursor()
-        cur.execute('UPDATE Animals SET owner_id = ? WHERE id = ?', (owner_id, animal_id))
+        cur = get_cursor(con)
+        cur.execute('UPDATE Animals SET owner_id = %s WHERE id = %s', (owner_id, animal_id))
         con.commit()
         con.close()
 

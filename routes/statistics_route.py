@@ -1,5 +1,6 @@
-from database.database import get_db_connection
+from database.database import get_db_connection, get_cursor
 from flask import jsonify, request
+from lib.helper_functions import get_animal_count, get_owner_count
 
 
 def register_statistics_routes(app):
@@ -14,25 +15,26 @@ def register_statistics_routes(app):
                 description: Statistiken über Tiere und Besitzer
                 examples:
                     application/json:
-                        - total_animals: 5
-                        - total_owners: 2
+                        animal_by_genus:
+                            birds: 1,
+                            mammals: 3
+                        total_animals: 5
+                        total_owners: 2
         """
         con = get_db_connection()
-        cur = con.cursor()
-        animal_count = cur.execute('SELECT COUNT(*) FROM Animals').fetchone()[0]
-        owner_count = cur.execute('SELECT COUNT(*) FROM Owners').fetchone()[0]
+        cur = get_cursor(con)
+        animal_count = get_animal_count(con)
+        owner_count = get_owner_count(con)
         # Nach Gattung filtern
-        genus_stats = cur.execute(
+        cur.execute(
             '''
             SELECT genus, COUNT(*) as count FROM Animals
             WHERE genus IS NOT NULL
             GROUP BY genus
             '''
-        ).fetchall() # ("mammals", 3), ("birds", 2), ...
+        )
 
-        # genus_stats_rows = []
-        # for row in genus_stats:
-        #     genus_stats_rows.append(row["genus"]: row[])
+        genus_stats = cur.fetchall()
 
         con.close()
         stats = {

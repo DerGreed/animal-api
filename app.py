@@ -1,3 +1,4 @@
+from dotenv import set_key
 from flask import Flask
 from flasgger import Swagger
 from database.database import init_db
@@ -19,4 +20,4 @@ def home():
 
 if __name__ == "__main__":
     flask_app.run(debug=True, port=5050)
-
+    set_key('.env', 'DB_RUNNING', '')
