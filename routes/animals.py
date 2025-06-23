@@ -114,15 +114,15 @@ def register_animal_routes(app):
                     application/json:
                         message: Keine oder fehlerhafte Daten übertragen
         """
-        new_animal:dict
+        new_animal: dict
         new_animal = request.get_json()
         if not new_animal or 'name' not in new_animal:
             return jsonify({"message": "Keine oder fehlerhafte Daten übertragen"}), 400
         con = get_db_connection()
         cur = get_cursor(con)
-        animal = [new_animal[key] if key in new_animal.keys() else None for key in KEY_LIST]
-        key_names = ', '.join(KEY_LIST)
-        cur.execute('INSERT INTO Animals (' + key_names + ') VALUES (%s,%s,%s, %s)', (*animal, )) 
+        values = [new_animal[key] if key in new_animal.keys() else None for key in KEY_LIST]
+        keys = ', '.join(KEY_LIST)
+        cur.execute('INSERT INTO Animals (' + keys + ') VALUES (%s,%s,%s, %s)', (*values, )) 
         con.commit() 
         con.close()
         return jsonify({"message": "Tier wurde erfolgreich hinzugefügt"}), 201
@@ -152,13 +152,13 @@ def register_animal_routes(app):
                     application/json:
                         message: Tier mit der ID 7 existiert nicht
         """
-        con = get_db_connection() 
-        cur = get_cursor(con)
+        con = get_db_connection()
         # Überprüfe, ob das Tier mit der angegebenen ID überhaupt existiert
         animal = get_animal_by_id(animal_id, con)
         if animal is None:
             con.close()
             return jsonify({"message": f"Tier mit der ID {animal_id} existiert nicht"}), 404
+        cur = get_cursor(con)
         cur.execute('DELETE FROM Animals WHERE id = %s', (animal_id,))
         con.commit()
         con.close()
@@ -210,15 +210,12 @@ def register_animal_routes(app):
                     application/json:
                         message: Tier mit der ID 7 existiert nicht
         """
-        updated_animal:dict
+        updated_animal: dict
         updated_animal = request.get_json() # Speichere dir das Objekt im Body aus dem Request des Clients
         if not updated_animal or 'name' not in updated_animal:
-            con.close()
             return jsonify({"message": "Fehlende Daten"}), 400
         # Überprüfe, ob das Tier überhaupt existiert in der DB mit dieser ID
-        con = get_db_connection() # Schritt 1
-        cur = get_cursor(con) # Schritt 2
-        # Schritt 3
+        con = get_db_connection()
         animal = get_animal_by_id(animal_id, con)
         if animal is None:
             con.close()
@@ -226,8 +223,8 @@ def register_animal_routes(app):
         # Update jetzt das Tier mit der übergebenen ID und mit den übergebenen Daten
         # for key in ['age', 'genus', 'owner_id']:
         #     updated_animal.setdefault(key, None)
-        new_animal = [updated_animal[key] if key in updated_animal.keys() else None for key in KEY_LIST]
-        key_names = ', '.join([key + ' = %s' for key in KEY_LIST])
+        values = [updated_animal[key] if key in updated_animal.keys() else None for key in KEY_LIST]
+        keys = ', '.join([key + ' = %s' for key in KEY_LIST])
         # cur.execute('UPDATE Animals SET name = %s, age = %s, genus = %s, owner_id = %s WHERE id = %s',
         #             (updated_animal['name'],
         #              updated_animal['age'],
@@ -235,7 +232,8 @@ def register_animal_routes(app):
         #              updated_animal['owner_id'],
         #              animal_id)
         #             )
-        cur.execute('UPDATE Animals SET ' + key_names + ' WHERE id = %s', (*new_animal, animal_id))
+        cur = get_cursor(con)
+        cur.execute('UPDATE Animals SET ' + keys + ' WHERE id = %s', (*values, animal_id))
         con.commit()
         con.close()
         return jsonify({"message": "Tier wurde komplett aktualisiert"}), 200
@@ -287,7 +285,7 @@ def register_animal_routes(app):
                     application/json:
                         message: Tier mit der ID 7 existiert nicht
         """
-        updated_animal:dict
+        updated_animal: dict
         updated_animal = request.get_json() # name, age, genus
         if not updated_animal:
             return jsonify({"message": "Fehlende Daten"}), 400
@@ -297,27 +295,11 @@ def register_animal_routes(app):
         if animal is None:
             con.close()
             return jsonify({"message": f"Tier mit der ID {animal_id} existiert nicht"}), 404
-        # # Leere Liste, wo wir die Felder mitgeben, die wir speziell updaten wollen
-        # update_fields = [] # Notizzettel, wo wir alle Spalten reinschreiben, die der Client updaten möchte, z.B. nur name: elephant Joel, age = 24
-        # # Leere Liste, wo wir die Werte der Felder mitgeben, die wir updaten wollen
-        # update_values = [] # Notizzettel, wo wir die entsprechenden Werte reinschreiben von den Spalten, die wir aktualisieren wollen
-
-        # for field in ['name', 'age', 'genus', 'owner_id']: # Iteriere über alle möglichen, vorhandenen Spalte der Tabelle
-        #     if field in updated_animal:
-        #         update_fields.append(f'{field} = %s') # name = %s, age = %s
-        #         update_values.append(updated_animal[field]) # elephant Joel, 24
-        
-        # update_fields = []
-        keys = [key for key in KEY_LIST if key in updated_animal.keys()]
-        if keys:
-            update_fields = [updated_animal[key] for key in keys]
-            key_names = ', '.join([key + ' = %s' for key in keys])
-
-        # if update_fields:
-            # update_values.append(animal_id)
-            # query = f'UPDATE Animals SET {", ".join(update_fields)} WHERE id = %s' # UPDATE Animals SET name = %s, age = %s WHERE id = %s
-            # cur.execute(query, update_values)
-            cur.execute('UPDATE Animals SET ' + key_names + ' WHERE id = %s', (*update_fields, animal_id))
+        key_list = [key for key in KEY_LIST if key in updated_animal.keys()]
+        if key_list:
+            values = [updated_animal[key] for key in key_list]
+            keys = ', '.join([key + ' = %s' for key in key_list])
+            cur.execute('UPDATE Animals SET ' + keys + ' WHERE id = %s', (*values, animal_id))
             con.commit()
         con.close()
         return jsonify({"message": "Tier wurde geupdated"}), 200
@@ -462,7 +444,7 @@ def register_animal_routes(app):
         """
         animal = get_animal_by_id(animal_id)
         if animal is None:
-            return jsonify({"message": f"Tier mit der ID {animal_id} existiert nicht"}), 404
+            return jsonify({"message": f"Tier mit der ID {animal_id} existiert nichtTier mit der ID {animal_id} existiert nicht"}), 404
         if animal["owner_id"] is None:
             return jsonify({"message": f"Tier mit der ID {animal_id} hat keinen Besitzer"}), 400
 
